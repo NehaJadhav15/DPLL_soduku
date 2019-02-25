@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
-#define ROOT "./data/"
 #define PATH "./data/n.cnf"
+#define RES_PATH "./data/n.res"
 #define UNKNOWN 0
 #define NEG -1
-
 
 typedef struct Node {
     int data;
@@ -13,33 +13,40 @@ typedef struct Node {
 } Node;
 
 typedef struct List {
-    int len;    // len of sub_list
+    // int len;    // len of sub_list
     struct List *next;
     Node *head;
 } List;
 
-int parser(int file_no, int * nvp, int *ncp, List *L) {
+typedef struct StackCell {
+    // the unit of stack, used for DPLL()
+    List * L, * new_L;
+    int received_value, prefer_v, tried_another;
+} Cell;
+
+List *parser(int file_no, int * nvp, int *ncp) {
     /*
     To find that if a cnf file in correct format, and read data from file.
     */
     FILE *fp;
     int start_read = 0, tmp, over = 0;
-    // char path[] = ROOT "n.cnf";
     char path[] = PATH;
-    List *lp = L;
+    List *L = (List *)malloc(sizeof(List)), *lp = L, *pre = NULL;
     Node *np = NULL;
     path[7] = file_no + 48;
     fp = fopen(path, "r");
     if (!fp) {
         printf("> ERROR: open file failed.\n");
-        return -1;
+        exit(-1);
     }
+    int i = 0;
     while (1) {
+        i++;
         if (over)
             break;
         if (start_read == 0) {
             char head_c;        // the first character of a line
-            fscanf(fp, "%c", &head_c);
+            int res = fscanf(fp, "%c", &head_c);
             if (head_c == 'p') {
                 start_read = 1;
                 // to getchar 'cnf':
@@ -58,7 +65,7 @@ int parser(int file_no, int * nvp, int *ncp, List *L) {
                 }
             } else {
                 printf("> ERROR: file format error.\n");
-                return -1;
+                exit(-1);
             }
         } else {
             int num = 0, status = 1;
@@ -66,7 +73,7 @@ int parser(int file_no, int * nvp, int *ncp, List *L) {
             np = lp->head;
             while (1) {
                 status = fscanf(fp, "%d", &tmp);
-                if (status == -1) {
+                if (status != 1) {
                     over = 1;
                     break;
                 }
@@ -83,8 +90,9 @@ int parser(int file_no, int * nvp, int *ncp, List *L) {
                     np = np->next;
                     num ++;
                 } else {
-                    lp->len = num;
+                    // lp->len = num;
                     lp->next = (List *)malloc(sizeof(List));
+                    pre = lp;
                     lp = lp->next;
                     lp->next = NULL;
                     break;
@@ -92,8 +100,10 @@ int parser(int file_no, int * nvp, int *ncp, List *L) {
             }
         }
     }
+    pre->next = NULL;
+    fclose(fp);
     printf("> INFO: File loaded over: nc=%d, nv=%d.\n", *ncp, *nvp);
-    return 1;
+    return L;
 }
 
 int echo(List *L) {
@@ -101,7 +111,7 @@ int echo(List *L) {
     List *lp = L;
     int i = 0;
     Node *np = NULL;
-    while (lp->next) {
+    while (lp) {
         np = lp->head;
         while(np) {
             printf("%d ", np->data);
@@ -113,115 +123,12 @@ int echo(List *L) {
     }
 }
 
-int abs(num) {
+int abs(int num) {
     return num > 0 ? num : -num;
 }
 
-int sign(num) {
+int sign(int num) {
     return num > 0 ? 1 : -1;
-}
-
-int count_times(List *L, int nv, int count1[], int count2[]) {
-    // log:
-    printf("> INFO: Count times of V:\n");
-    for (int i = 0; i < nv; i++)
-        printf("---");
-    printf("---------");
-    printf("\nVaribles: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-2d ", i + 1);
-    // count appearence times of v in cnf (len(c) > 1)
-    List *lp = L;
-    Node *np = NULL;
-    while (lp->next) {
-        np = lp->head;
-        if (lp->len > 1) {
-            while(np) {
-                if (np->data > 0)
-                    count1[abs(np->data) - 1] ++;
-                else
-                    count2[abs(np->data) - 1] ++;
-                np = np->next;
-            }
-        }
-        lp = lp->next;
-    }
-    printf("\nPosCount: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-2d ", count1[i]);
-    printf("\nNegCount: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-2d ", count2[i]);
-    // change count2 and count1:
-    for (int i = 0; i < nv; i++) {
-        int tmp = count1[i];
-        count1[i] = count1[i] + count2[i];
-        if (tmp > count2[i])
-            count2[i] = 1;
-        else
-            count2[i] = NEG;
-    }
-    // log:
-    printf("\nAllCount: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-2d ", count1[i]);
-    printf("\nAsgnVale: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-2d ", (count2[i] + 1) / 2);
-    printf("\n");
-}
-
-int get_value(List *L, int model[], int nv) {
-    // to get the value of cnf.
-    int i = 0;
-    List *lp = L;
-    Node *np = NULL;
-    while (lp->next) {
-        i ++;
-        int c_value = 0;
-        np = lp->head;
-        while (np) {
-            if (model[abs(np->data) - 1] * np->data > 0 || model[abs(np->data) - 1] == UNKNOWN) {
-                c_value = 1;   // true or unknown
-                break;
-            }
-            np = np->next;
-        }
-        lp = lp->next;
-        if (c_value == 0) {
-            // echo_model(model, nv);
-            return 0;
-        }
-    }
-    return 1;   // unknown or true.
-}
-
-int get_order(int count[], int nv, int order[]) {
-    for (int i = 0; i < nv; i++)
-        order[i] = i;
-    for (int i = 0; i < nv; i++) {
-        int max = 0, max_ix, tmp;
-        for (int j = i; j < nv; j++) {
-            if (count[j] > max) {
-                max = count[j];
-                max_ix = j;
-            }
-        }
-        tmp = count[i];
-        count[i] = count[max_ix];
-        count[max_ix] = tmp;
-        tmp = order[i];
-        order[i] = order[max_ix];
-        order[max_ix] = tmp;
-    }
-    printf("AgnOrder: ");
-    for (int i = 0; i < nv; i++)
-        printf("%-3d", order[i] + 1);
-    printf("\n");
-    for (int i = 0; i < nv; i++)
-        printf("---");
-    printf("---------");
-    printf("\n");
 }
 
 int echo_model(int model[], int nv) {
@@ -245,180 +152,352 @@ int echo_model(int model[], int nv) {
     printf("--------\n");
 }
 
-int remove_sub_list(List ** L, int ix) {
-    // remove *L[ix], L = &List_p, ix is index.
-    List * pre = *L, * p = *L;
-    if (!ix) {
-        *L = (*L)->next;
-        // free(pre);
-        return 1;
-    } else {
-        for (int i = 0; i != ix; i++) {
-            pre = p;
-            p = p->next;
-        }
-        pre->next = p->next;
-        // free(p);
-        return 1;
+List * copy_sub_L(List* L) {
+    /*
+    * get a copy of sub_List L.
+    * L->N->N->N->...->N->NULL
+    * L can be empty.
+    */
+    List * L_copy = (List *)malloc(sizeof(List));
+    L_copy->next = NULL;
+    // L_copy->len = L->len;
+    if (!L->head) {
+        L_copy->head = NULL;
+        return L_copy;
     }
+    L_copy->head = (Node *)malloc(sizeof(Node));
+    Node * np = L->head, * np_new = L_copy->head;
+    while(np) {
+        np_new->data = np->data;
+        if (!np->next) {
+            np_new->next = NULL;
+            break;
+        }
+        np_new->next = (Node *)malloc(sizeof(Node));
+        np_new = np_new->next;
+        np = np->next;
+    }
+    return L_copy;
 }
 
-int remove_c(List ** L, int v) {
-    // remove c that has pure V.
-    List *lp = *L, * pre = *L;
-    Node *np = NULL;
-    while (lp->next) {
-        int removed = 0;
-        np = lp->head;
-        while(np) {
-            if (abs(np->data) == v) {
-                if (lp == *L)
-                    *L = (*L)->next;
-                else
-                    pre->next = lp->next;
-                removed = 1;
-                break;
-            }
-            np = np->next;
-        }
-        if (!removed)
-            pre = lp;
+List* copy_L(List * L) {
+    // echo(L);
+    List * L_copy = copy_sub_L(L);
+    List *lp = L->next, *lp_new = L_copy;
+    while (lp) {
+        lp_new->next = copy_sub_L(lp);
+        if (!lp->next)
+            break;
+        lp_new = lp_new->next;
         lp = lp->next;
     }
+    return L_copy;
 }
 
-int remove_pure_l(List ** L, int * nvp, int * ncp, int model[]) {
-    // remove clauses with V that only appear as + or only -
-    List *lp = *L;
-    Node *np = NULL;
-    for (int i = 0; i < *nvp; i++) {
-        if (model[i] != UNKNOWN)
-            continue;
-        int v_sign = 0, remove_v = 1;
-        lp = *L;
-        while (lp->next) {
-            np = lp->head;
-            while(np) {
-                if (i + 1 == abs(np->data)) {
-                    if (v_sign * sign(np->data) < 0)
-                        remove_v = 0;
-                    v_sign = sign(np->data);
+int remove_v(List ** L, int v) {
+    List *lp = *L, *pre_lp = *L;
+    while (lp) {
+        if (lp->head == NULL)
+            return -1;
+        int remove_clause = 0;
+        Node *np = lp->head, *pre_np = lp->head;
+        while(np) {
+            if (np->data == -v) {
+                // remove -v:
+                if (np == lp->head) {
+                    // remove the first node:
+                    lp->head = lp->head->next;
+                    free(np);
+                    np = lp->head;
+                    if (np == NULL)
+                        return -1;
+                } else {
+                    pre_np->next = np->next;
+                    free(np);
+                    np = pre_np->next;
                 }
-                np = np->next;
+                // lp->len --;
+                continue;
+            } else if (np->data == v) {
+                // remove clause:
+                Node *head = lp->head;
+                if (lp == *L) {
+                    *L = (*L)->next;
+                    free(lp);
+                    lp = (*L);
+                    if (*L == NULL)
+                        return 1;   // finish dpll.
+                } else {
+                    pre_lp->next = lp->next;
+                    free(lp);
+                    lp = pre_lp->next;
+                }
+                Node * bak = NULL;
+                while(head) {
+                    bak = head;
+                    head = head->next;
+                    free(bak);
+                }
+                remove_clause = 1;
+                break;      // np was freed, skip the loop;
             }
+            pre_np = np;
+            np = np->next;
+        }
+        if (!remove_clause) {
+            pre_lp = lp;
             lp = lp->next;
         }
-        if (remove_v) {
-            printf("> INFO: Varible[%d] only havs sign [%d], Removed.\n", i + 1, v_sign);
-            model[i] = v_sign > 0 ? 1 : NEG;
-            *ncp -= remove_c(L, i + 1);
-        }
     }
-    printf("> INFO: Pure literal removed.\n");
+    return 0;   // normal status.
 }
 
-int remove_single_l(List ** L, int * nvp, int * ncp, int model[]) {
-    // remove clauses with V that have single clause.
-    List *lp = *L;
+int delete_L(List * L) {
+    List *lp = L, * pre_l = NULL;
     Node *np = NULL;
-    for (int i = 0; i < *nvp; i++) {
-        if (model[i] != UNKNOWN)
-            continue;
-        int remove_v = 0;
-        lp = *L;
-        while (lp->next) {
-            np = lp->head;
-            while(np) {
-                if (i + 1 == abs(np->data) && lp->len == 1) {
-                    printf("> INFO: Varible[%d] has single clause, Removed.\n", i + 1);
-                    model[i] = np->data > 0 ? 1 : NEG;
-                    *ncp -= remove_c(L, i + 1);
-                }
-                np = np->next;
-            }
-            lp = lp->next;
+    int i = 0;
+    while (lp) {
+        Node *pre = NULL;
+        np = lp->head;
+        while(np) {
+            pre = np;
+            np = np->next;
+            free(pre);
         }
+        pre_l = lp;
+        lp = lp->next;
+        free(pre_l);
+        i++;
     }
-    printf("> INFO: Single literal removed.\n");
 }
 
-int *dpll(List * L, int nv, int model[], int assign_order[], int pre_assign_value[], int n) {
-    /*
-    Args:
-    ------
-    - nv: num of varibles.
-    - model: Assignment of varibles.
-    - assign_order: the assignment order of v. stores index of each v.
-    - pre_assign_value: how to assign each v.
-    - n: the num of varibles that had been assigned.
-    */
-    // To get a backup of model:
-    int *new_model = (int *)malloc(nv * sizeof(int));
-    for (int i = 0; i < nv; i++)
-        new_model[i] = model[i];
-    if (n >= nv)
-        return new_model;
-    // Choose next varible to assign:
-    int ix = assign_order[n], try_another = 0, skip = 0;
-    if (new_model[ix] == UNKNOWN) {
-        new_model[ix] = pre_assign_value[ix];
-        printf("> INFO: [%d] Assign Varible NO.%d=%d\n", n, ix + 1, pre_assign_value[ix]);
-    } else {
-        // model[ix] already had value, skip.
-        try_another = 0;
-        skip = 1;
-    }
-    if (!skip) {
-        // To check conflict:
-        if (!get_value(L, new_model, nv)) {
-            printf("> INFO: Conflict found, Try another value.\n");
-            new_model[ix] = (pre_assign_value[ix] == 1) ? NEG : 1;
-            try_another = 1;
-            if (!get_value(L, new_model, nv)) {
-                printf("> INFO: Conflict found, Backtrace.\n");
-                free(new_model);
-                return model;
-            }
-        }
-        // To infer other varibles:
-        List * lp = L;
+int add_v(List ** L, int v_data) {
+    List *p = (List *)malloc(sizeof(List));
+    // p->len = 1;
+    p->head = (Node *)malloc(sizeof(Node));
+    p->head->data = v_data;
+    p->head->next = NULL;
+    p->next = (*L);
+    *L = p;
+}
+
+int get_next_v(List * L, int nv) {
+    int max_num = 0, next_v = 0;
+    for (int i = 0; i < nv; i++) {
+        int now_pos_num = 0, now_neg_num = 0;
+        List *lp = L;
         Node *np = NULL;
-        while (lp->next) {
+        while (lp) {
             np = lp->head;
-            // R1: 0 0 0 0 N -> 0 0 0 0 1
-            int neg_num = 0, unknown_num = 0, pos_ix = 0;
             while(np) {
-                if (np->data == NEG)
-                    neg_num ++;
-                else if (np->data == UNKNOWN) {
-                    pos_ix = abs(np->data) - 1;
-                    unknown_num ++;
+                if (np->data == i + 1)
+                    now_pos_num ++;
+                else if (np->data == -i - 1)
+                    now_neg_num ++;
+                np = np->next;
+            }
+            lp = lp->next;
+        }
+        if (now_neg_num + now_pos_num > max_num) {
+            next_v = now_pos_num > now_neg_num ? i + 1 : -i - 1;
+            max_num = now_neg_num + now_pos_num;
+        }
+    }
+    return next_v;
+}
+
+int dpll(List * L, int nv, int model[]) {
+    List * new_L = copy_L(L);
+    // to find if there is single clause:
+    while (1) {
+        List *lp = new_L;
+        Node *np = NULL;
+        int have_single = 0;
+        while (lp) {
+            np = lp->head;
+            while (np) {
+                if (lp->head && !lp->head->next) {
+                    int value = np->data > 0 ? 1 : NEG;
+                    model[abs(np->data) - 1] = value;
+                    have_single = 1;
+                    printf("> INFO: Assign clause [%d].\n", np->data);
+                    int res = remove_v(&new_L, np->data);
+                    // echo(new_L);
+                    if (res != 0)
+                        return res;
+                    break;
+                } else if (lp->head == NULL) {
+                    delete_L(new_L);
+                    return -1;
                 }
                 np = np->next;
             }
-            if (unknown_num == 1 && neg_num == lp->len - 1)
-                new_model[pos_ix] = 1;
+            if (have_single)
+                break;
             lp = lp->next;
         }
+        if (!have_single)
+            break;
     }
-    // recursive:
-    int *bak_model = dpll(L, nv, new_model, assign_order, pre_assign_value, n + 1);
-    if (bak_model == new_model) {
-        if (try_another) {
-            free(new_model);
-            return model;
-        } else {
-            int value = (pre_assign_value[ix] == 1) ? NEG : 1;
-            new_model[ix] = value;
-            printf("> INFO: [%d] Get conflict, Assign Varible NO.%d=%d\n", n, ix + 1, value);
-            bak_model = dpll(L, nv, new_model, assign_order, pre_assign_value, n + 1);
-            if (bak_model == new_model) {
-                free(new_model);
-                return model;
+    // echo(L);
+    if (new_L == NULL)    // empty, succes.
+        return 1;
+    // choose v and assign:
+    int next_v = get_next_v(new_L, nv);
+    model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
+    add_v(&new_L, next_v);
+    if(dpll(new_L, nv, model) == 1) {
+        delete_L(new_L);
+        return 1;
+    } else {
+        List *bak = new_L;
+        new_L = new_L->next;
+        free(bak->head);
+        free(bak);
+        add_v(&new_L, -next_v);
+        return dpll(new_L, nv, model);
+    }
+}
+
+int dpll_new(List * L, int nv, int model[]) {
+    // List **s = (List **)malloc(nv * sizeof(List *));
+    Cell *s = (Cell *)malloc(nv * sizeof(Cell));
+    for (int i = 0; i < nv; i++) {
+        s[i].L = NULL;
+        s[i].new_L = NULL;
+        s[i].prefer_v = 0;
+        s[i].received_value = 0;
+        s[i].tried_another = 0;
+    }
+    int depth = 0;       // stack depth, -1 for empty.
+    s[0].L = L;
+    while (depth != -1) {
+        int pop_now = 0;
+        // get and process returned value :
+        if (s[depth].received_value == 1) {
+            s[depth].L = NULL;
+            s[depth].new_L = NULL;
+            s[depth].prefer_v = 0;
+            s[depth].received_value = 0;
+            s[depth].tried_another = 0;
+            s[depth - 1].received_value = 1;
+            depth--;
+            continue;
+        } else if (s[depth].received_value == -1) {
+            if (s[depth].tried_another == 1) {
+                s[depth].L = NULL;
+                s[depth].new_L = NULL;
+                s[depth].prefer_v = 0;
+                s[depth].received_value = 0;
+                s[depth].tried_another = 0;
+                s[depth - 1].received_value = -1;
+                depth --;
+                continue;
+            } else {
+                List *bak = s[depth].new_L;
+                s[depth].new_L = (s[depth].new_L)->next;    // remove prefer_v from new_L.
+                free(bak->head);
+                free(bak);
+                add_v(&(s[depth].new_L), -s[depth].prefer_v);
+                s[depth + 1].L = s[depth].new_L;
+                s[depth].tried_another = 1;
+                depth ++;
+                continue;
             }
         }
+        List * new_L = copy_L(s[depth].L);
+        s[depth].new_L = new_L;
+        // to find if there is single clause:
+        while (1) {
+            List *lp = new_L;
+            Node *np = NULL;
+            int have_single = 0;
+            while (lp) {
+                np = lp->head;
+                while(np) {
+                    if (lp->head && !lp->head->next) {
+                        int value = np->data > 0 ? 1 : NEG, tmp = np->data;
+                        model[abs(np->data) - 1] = value;
+                        have_single = 1;
+                        int res = remove_v(&new_L, np->data);
+                        echo(new_L);
+                        if (res != 0) {
+                            s[depth].L = NULL;
+                            s[depth].new_L = NULL;
+                            s[depth].prefer_v = 0;
+                            s[depth].received_value = 0;
+                            s[depth].tried_another = 0;
+                            s[depth - 1].received_value = res;
+                            depth--;
+                            continue;
+                        }
+                        printf("> INFO: Assign clause[%d].\n", tmp);
+                        // echo(L);
+                        break;
+                    } else if (lp->head == NULL) {
+                        delete_L(new_L);
+                        s[depth].L = NULL;
+                        s[depth].new_L = NULL;
+                        s[depth].prefer_v = 0;
+                        s[depth].received_value = 0;
+                        s[depth].tried_another = 0;
+                        s[depth - 1].received_value = -1;
+                        depth--;
+                        pop_now = 1;
+                        break;
+                    }
+                    np = np->next;
+                }
+                if (have_single || pop_now)
+                    break;
+                lp = lp->next;
+            }
+            if (!have_single || pop_now)
+                break;
+        }
+        // echo(new_L);
+        if (pop_now)
+            continue;
+        if (new_L == NULL) {  // empty, succes.
+            s[depth].L = NULL;
+            s[depth].new_L = NULL;
+            s[depth].prefer_v = 0;
+            s[depth].received_value = 0;
+            s[depth].tried_another = 0;
+            s[depth - 1].received_value = 1;
+            depth--;
+            continue;
+        }
+        // choose v and assign:
+        int next_v = get_next_v(new_L, nv);
+        s[depth].prefer_v = next_v;
+        model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
+        add_v(&new_L, next_v);
+        depth ++;
+        s[depth].L = new_L;
+        // echo(s[depth].L);
     }
-    // bak_model != new_model, get solution:
-    printf("> INFO: Backtracing finish, return res...\n");
-    return bak_model;
+    if (s[0].received_value == 1)
+        return 1;
+    else
+        return -1;
+}
+
+int save2file(int model[], int nv, int res, double cost, int file_no) {
+    char path[] = RES_PATH;
+    path[7] = file_no + 48;
+    FILE *fp = fopen(path, "wt");
+    fprintf(fp, "%d\n", res);
+    // fwrite(&res, sizeof(int), 1, fp);
+    if (res == 1) {
+        for (int i = 0; i < nv; i++) {
+            char s;
+            if (model[i] == 1)
+                fprintf(fp, "%d ", i + 1);
+            else
+                fprintf(fp, "-%d ", i + 1);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "%lf", cost * 1000);
 }

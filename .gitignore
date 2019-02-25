@@ -1,5 +1,15 @@
 dpll
-main
 why_c_file
 *.cnf
 .vscode
+综合*
+main
+*.res
+*.bak*
+*.out
+1~4*
+solver
+soduku
+dpll
+main
+tmp*

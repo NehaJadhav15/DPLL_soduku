@@ -33,7 +33,9 @@ Others:
 */
 
 #include <stdio.h>
+#include <time.h>
 #include "dpll.h"
+#include "soduku.h"
 
 
 void main_ui() {
@@ -50,8 +52,8 @@ void sat_ui() {
     // system("clear");
     printf("\n----------------\n");
     printf("1. Read formula from files (./data)\n");
-    printf("2. Input formula (fmt: l l l, l l l, l l l)\n");
-    printf("3. Main menu\n");
+    // printf("2. Input formsula (fmt: l l l, l l l, l l l)\n");
+    printf("2. Main menu\n");
     printf("----------------\n");
 }
 
@@ -65,13 +67,18 @@ void soduku_ui() {
     printf("----------------\n");
 }
 
+
 int main() {
+    clock_t start, finish;
     int opt;
-    List head, *L = &head;
+    List *L = (List *)malloc(sizeof(List));
     int quit = 0;
     while (1) {
         main_ui();
-        scanf("%d", &opt);
+        if(scanf("%d", &opt) != 1) {
+            printf("> ERROR: Input format error!\n");
+            return -1;
+        }
         switch (opt) {
             // solve SAT problem:
             case 1:
@@ -81,44 +88,43 @@ int main() {
                     if (quit)
                         break;
                     printf("> Enter your option: ");
-                    scanf("%d", &opt);
+                    if (scanf("%d", &opt) != 1) {
+                        printf("> ERROR: Input format error!\n");
+                        return -1;
+                    }
                     switch (opt) {
                         case 1:
                             printf("> Enter the NO of .cnf file:\n");
                             int file_no, nv, nc;
-                            scanf("%d", &file_no);
-                            parser(file_no, &nv, &nc, L);
-                            // echo(L);
-                            // To init the assign model, -1 for unknown:
+                            if(scanf("%d", &file_no) != 1) {
+                                printf("> ERROR: Input format error!\n");
+                                break;
+                            }
+                            List *L = parser(file_no, &nv, &nc);
+                            // To init the assign model, 0 for unknown:
                             int *model = (int *)malloc(nv * sizeof(int));
-                            /*
-                            during counting:
-                            - count1: count apprence times of each v when v==1;
-                            - count2: count apprence times of each v when v==0;
-                            after counting:
-                            - count1: store total apprence times of each v (no matter v == 0 or 1)
-                            - count2: for v, store 1 if v_pos_time > v_neg_time.
-                            ------------
-                            first sort variblese by apprence times, and assign v with this order. if if v_pos_time > v_neg_time, v = 1, else v = 0. count2 stores the value of each v.
-                            */
-                            int *count1 = (int *)malloc(nv * sizeof(int));
-                            int *count2 = (int *)malloc(nv * sizeof(int));
-                            int *assign_order = (int *)malloc(nv * sizeof(int));
-                            for(int i = 0; i < nv; i++)
+                            for (int i = 0; i < nv; i++)
                                 model[i] = UNKNOWN;
-                            count_times(L, nv, count1, count2);
-                            get_order(count1, nv, assign_order);
-                            remove_pure_l(&L, &nv, &nc, model);
-                            remove_single_l(&L, &nv, &nc, model);
+                            start = clock();
+                            // remove_v(&L, 2, &nc);
                             // echo(L);
-                            int *res_p = dpll(L, nv, model, assign_order, count2, 0);
-                            if (res_p != model)
-                                echo_model(res_p, nv);
-                            else
-                                printf("> INFO: Can\'t find solution.\n");
+                            int res = dpll(L, nv, model);
+                            // int res = dpll_new(L, nv, model);
+                            if (res == 1) {
+                                printf("> INFO: Found solution:\n");
+                                echo_model(model, nv);
+                            } else printf("> INFO: No solution found.\n");
+                            finish = clock();
+                            double cost = (double)(finish - start) / CLOCKS_PER_SEC;
+                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost * 1000, cost);
+                            printf("Goodbye!\n");
+                            save2file(model, nv, res, cost, file_no);
+                            // free(model);
+                            delete_L(L);
+                            exit(0);
                             break;
-                        case 2:
-                            printf("> Input CNF:\n");
+                        // case 2:
+                        //     printf("> Input CNF:\n");
                         default:
                             quit = 1;
                             break;
@@ -133,10 +139,19 @@ int main() {
                     if (quit)
                         break;
                     printf("> Enter your option: ");
-                    scanf("%d", &opt);
+                    if (scanf("%d", &opt) != 1) {
+                        printf("> ERROR: Input format error!\n");
+                        return -1;
+                    }
                     switch (opt) {
                         case 1:
                             printf("> Game init:\n");
+                            int given[9][9];
+                            for (int i = 0; i < 9; i ++)
+                                for (int j = 0; j < 9; j ++)
+                                    given[i][j] = 0;
+                            init(given);
+                            echo_soduku(given);
                             break;
                         case 2:
                             printf("> Solve soduku:\n");
