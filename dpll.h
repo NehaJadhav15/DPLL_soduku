@@ -5,7 +5,13 @@
 #define PATH "./data/n.cnf"
 #define RES_PATH "./data/n.res"
 #define UNKNOWN 0
+#define CHOOSE_V 0
 #define NEG -1
+#define UP 'w'
+#define DOWN 's'
+#define LEFT 'a'
+#define RIGHT 'd'
+
 
 typedef struct Node {
     int data;
@@ -320,7 +326,7 @@ int dpll(List * L, int nv, int model[]) {
                     int value = np->data > 0 ? 1 : NEG;
                     model[abs(np->data) - 1] = value;
                     have_single = 1;
-                    printf("> INFO: Assign clause [%d].\n", np->data);
+                    // printf("> INFO: Assign clause [%d].\n", np->data);
                     int res = remove_v(&new_L, np->data);
                     // echo(new_L);
                     if (res != 0)
@@ -343,7 +349,11 @@ int dpll(List * L, int nv, int model[]) {
     if (new_L == NULL)    // empty, succes.
         return 1;
     // choose v and assign:
-    int next_v = get_next_v(new_L, nv);
+    int next_v;
+    if (CHOOSE_V)
+        next_v = get_next_v(new_L, nv);
+    else
+        next_v = new_L->head->data;
     model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
     add_v(&new_L, next_v);
     if(dpll(new_L, nv, model) == 1) {
