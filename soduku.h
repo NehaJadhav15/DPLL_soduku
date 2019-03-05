@@ -58,13 +58,17 @@ int ehco_model_sat(int model[], int nv) {
 }
 
 
-int solve(int board[][9]) {
+int solve(int board[][9], int info) {
     int nv, nc, res_n = 1;
+    clock_t start, finish1, finish2;
     List *L = parser(9, &nv, &nc);
     // init model:
     int *model = (int *)malloc(nv * sizeof(int));
     for (int i = 0; i < nv; i++)
         model[i] = UNKNOWN;
+    float *decay = (float *)malloc(2 * nv * sizeof(float));
+    for (int i = 0; i < 2 * nv; i++)
+        decay[i] = 100;
     for (int x = 0; x < 9; x ++)
         for (int y = 0; y < 9; y ++)
             if (board[x][y]) {
@@ -78,7 +82,12 @@ int solve(int board[][9]) {
                 }
             }
     // ehco_model_sat(model, nv);
-    int res = dpll(L, nv, model);
+    start = clock();
+    int res = dpll_decay(L, nv, model, decay);
+    finish1 = clock();
+    double cost1 = (double)(finish1 - start) / CLOCKS_PER_SEC;
+    if (info)
+        printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost1 * 1000, cost1);
     for (int x = 0; x < 9; x ++)
         for (int y = 0; y < 9; y ++)
             for (int z = 1; z <= 9; z ++)
@@ -97,7 +106,7 @@ int init(int board[][9]) {
     // echo_soduku(board);
     // int tmp = solutionCount(board, 2);
     // printf("> res num: %d\n", tmp);
-    solve(board);
+    solve(board, 0);
 }
 
 
@@ -165,10 +174,10 @@ int solutionCount(int board[][9], int solutionsCuttoff) {
 }
 
 
-int dig(int board[][9]) {
+int dig(int board[][9], int hole_n) {
     // dig holes at a completed board.
     // echo_soduku(board);
-    for (int i = 0; i < HOLE_NUM; i ++) {
+    for (int i = 0; i < hole_n; i ++) {
         int res_n = 0, flag = 0;
         while(1) {
             randseed = time(0);
@@ -207,7 +216,7 @@ int echo_soduku_play(int board[][9], int x, int y, char value, int empty_pos[][9
                 printf("│");
             if (i == x && j == y) {
                 if (value == '0')
-                    printf(" ○ ");
+                    printf(" ▮ ");
                 else if (value == '-')
                     printf(" · ");
                 else if (value != '0') {

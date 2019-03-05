@@ -122,6 +122,8 @@ int echo(List *L) {
         while(np) {
             printf("%d ", np->data);
             np = np->next;
+            if (np)
+                printf("∨ ");
         }
         printf("\n");
         lp = lp->next;
@@ -312,7 +314,7 @@ int get_next_v(List * L, int nv) {
     return next_v;
 }
 
-int dpll(List * L, int nv, int model[]) {
+int dpll_valilla(List * L, int nv, int model[]) {
     List * new_L = copy_L(L);
     // to find if there is single clause:
     while (1) {
@@ -356,7 +358,7 @@ int dpll(List * L, int nv, int model[]) {
         next_v = new_L->head->data;
     model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
     add_v(&new_L, next_v);
-    if(dpll(new_L, nv, model) == 1) {
+    if(dpll_valilla(new_L, nv, model) == 1) {
         delete_L(new_L);
         return 1;
     } else {
@@ -365,7 +367,70 @@ int dpll(List * L, int nv, int model[]) {
         free(bak->head);
         free(bak);
         add_v(&new_L, -next_v);
-        return dpll(new_L, nv, model);
+        return dpll_valilla(new_L, nv, model);
+    }
+}
+
+int dpll_decay(List * L, int nv, int model[], float decay[]) {
+    List * new_L = copy_L(L);
+    // to find if there is single clause:
+    while (1) {
+        List *lp = new_L;
+        Node *np = NULL;
+        int have_single = 0;
+        while (lp) {
+            np = lp->head;
+            while (np) {
+                if (lp->head && !lp->head->next) {
+                    int value = np->data > 0 ? 1 : NEG;
+                    model[abs(np->data) - 1] = value;
+                    have_single = 1;
+                    // printf("> INFO: Assign clause [%d].\n", np->data);
+                    int res = remove_v(&new_L, np->data);
+                    // echo(new_L);
+                    if (res != 0)
+                        return res;
+                    break;
+                } else if (lp->head == NULL) {
+                    delete_L(new_L);
+                    return -1;
+                }
+                np = np->next;
+            }
+            if (have_single)
+                break;
+            lp = lp->next;
+        }
+        if (!have_single)
+            break;
+    }
+    // echo(L);
+    if (new_L == NULL)    // empty, succes.
+        return 1;
+    // choose v and assign:
+    int next_v;
+    if (CHOOSE_V) {
+        next_v = 0;
+        for (int i = 0; i < nv; i++)
+            if (decay[i] > decay[next_v])
+                next_v = i;
+        if (next_v + 1 > nv)
+            next_v = -(next_v - nv);
+    } else
+        next_v = new_L->head->data;
+    model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
+    add_v(&new_L, next_v);
+    if(dpll_decay(new_L, nv, model, decay) == 1) {
+        delete_L(new_L);
+        return 1;
+    } else {
+        List *bak = new_L;
+        decay[(new_L->head->data > 0) ? (new_L->head->data - 1) : -(new_L->head->data) + nv - 1] *= 0.95;
+        new_L = new_L->next;
+        free(bak->head);
+        free(bak);
+        add_v(&new_L, -next_v);
+        return dpll_decay(new_L, nv, model, decay);
     }
 }
 
@@ -510,4 +575,26 @@ int save2file(int model[], int nv, int res, double cost, int file_no) {
         fprintf(fp, "\n");
     }
     fprintf(fp, "%lf", cost * 1000);
+}
+
+
+int check(List * L, int model[], int nv) {
+    for (int i = 0; i < nv; i++) {
+        if (model[i] == NEG) {
+            add_v(&L, -(i + 1));
+        } else {
+            add_v(&L, (i + 1));
+        }
+        remove_v(&L, i + 1);
+        if (!L->head) {
+            printf("> Check over! Right answer!\n");
+            return 1;
+        }
+    }
+    // echo_model(model, nv);
+    // echo(L);
+    if (!L->head)
+        printf("> Check over! Right answer!\n");
+    else
+        printf("> Check over! Wrong answer!\n");
 }

@@ -101,7 +101,7 @@ void soduku_ui(int id) {
 
 
 int main() {
-    clock_t start, finish;
+    clock_t start, finish1, finish2;
     system("stty -icanon");     // close flush.
     int quit = 0;
     int given[9][9];
@@ -164,21 +164,36 @@ int main() {
                             for (int i = 0; i < nv; i++)
                                 model[i] = UNKNOWN;
                             start = clock();
+                            // sleep(2);
                             // remove_v(&L, 2, &nc);
                             // echo(L);
-                            int res = dpll(L, nv, model);
+                            // int res = dpll(L, nv, model);
+                            float *decay = (float *)malloc(2 * nv * sizeof(float));
+                            for (int i = 0; i < 2 * nv; i++)
+                                decay[i] = 100;
+                            int res1 = dpll_valilla(L, nv, model);
+                            // record time1:
+                            finish1 = clock();
+                            double cost1 = (double)(finish1 - start) / CLOCKS_PER_SEC;
+                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost1 * 1000, cost1);
+                            printf("----------------\n");
+                            // another method:
+                            int res2 = dpll_decay(L, nv, model, decay);
                             // int res = dpll_new(L, nv, model);
-                            if (res == 1) {
-                                printf("> INFO: Found solution:\n");
-                                echo_model(model, nv);
+                            if (res1 == 1) {
+                                printf("> INFO: Found solution.\n");
+                                // echo_model(model, nv);
                             } else printf("> INFO: No solution found.\n");
-                            finish = clock();
-                            double cost = (double)(finish - start) / CLOCKS_PER_SEC;
-                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost * 1000, cost);
-                            printf("Goodbye!\n");
-                            save2file(model, nv, res, cost, file_no);
+                            finish2 = clock();
+                            double cost2 = (double)(finish2 - start) / CLOCKS_PER_SEC;
+                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost2 * 1000, cost2);
+                            // printf("Goodbye!\n");
+                            save2file(model, nv, res2, cost2, file_no);
                             // free(model);
+                            List *L_check = parser(file_no, &nv, &nc);
+                            check(L_check, model, nv);
                             delete_L(L);
+                            // delete_L(L_check);
                             exit(0);
                             break;
                         // case 2:
@@ -194,10 +209,13 @@ int main() {
                 soduku_ui(1);
                 quit = 0;
                 opt = 1;
+                int hole_n = HOLE_NUM;
+                int get_input = 1;
                 while (1) {
                     if (quit)
                         break;
                     while(1) {
+                        system("stty -icanon");
                         char in = getchar();
                         if (in == 'w' && opt != 1) {
                             opt --;
@@ -212,15 +230,28 @@ int main() {
                     }
                     switch (opt) {
                         case 1:
+                            // if (get_input == 1) {
                             printf("> Game init:\n");
                             for (int i = 0; i < 9; i ++)
                                 for (int j = 0; j < 9; j ++)
                                     given[i][j] = 0;
                             // GenSodukuSAT();
                             init(given);
-                            dig(given);
+                            system("stty icanon");
+                            printf("> Enter num of hole you want tot dig: ");
+                            int sts = scanf("%d", &hole_n);
+                            get_input = 0;
+                            getchar();
+                            if (sts != 1 || hole_n > 64 || hole_n < 1) {
+                                get_input = 1;
+                                hole_n = HOLE_NUM;
+                                printf("> ERROR: input format error:\n");
+                            }
+                            system("stty -icanon");
+                            dig(given, hole_n);
                             echo_soduku(given);
-                            printf("Press any key to continue...\n");
+                            printf("Press w/s to continue...\n");
+                            // }
                             break;
                         case 2:
                             printf("> Show board:\n");
@@ -233,7 +264,7 @@ int main() {
                             break;
                         case 4:
                             printf("> Solve soduku:\n");
-                            solve(given);
+                            solve(given, 1);
                             echo_soduku(given);
                             printf("Press any key to continue...\n");
                             break;
@@ -242,7 +273,6 @@ int main() {
                             quit = 1;
                             break;
                         default:
-                            quit = 1;
                             break;
                     }
                 }
