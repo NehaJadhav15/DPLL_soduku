@@ -99,6 +99,17 @@ void soduku_ui(int id) {
     printf("----------------\n");
 }
 
+int echoRes(int res, int time1, int time2, int model[], int nv){
+    double cost = (double)(time2 - time1) / CLOCKS_PER_SEC;
+    printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost * 1000, cost);
+    printf("----------------\n");
+    if (res == 1) {
+        printf("> INFO: Found solution.\n");
+        echo_model(model, nv);
+    } else printf("> INFO: No solution found.\n");
+    return cost;
+}
+
 
 int main() {
     clock_t start, finish1, finish2;
@@ -163,41 +174,31 @@ int main() {
                             int *model = (int *)malloc(nv * sizeof(int));
                             for (int i = 0; i < nv; i++)
                                 model[i] = UNKNOWN;
-                            start = clock();
-                            // sleep(2);
-                            // remove_v(&L, 2, &nc);
-                            // echo(L);
-                            // int res = dpll(L, nv, model);
+
                             float *decay = (float *)malloc(2 * nv * sizeof(float));
                             for (int i = 0; i < 2 * nv; i++)
                                 decay[i] = 100;
-                            int res1 = dpll_valilla(L, nv, model);
-                            // record time1:
+
+                            start = clock();
+                            // int res1 = dpll_decay(L, nv, model, decay);
+                            int res1 = dpll_valilla(L, nv, model, 1);
                             finish1 = clock();
-                            double cost1 = (double)(finish1 - start) / CLOCKS_PER_SEC;
-                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost1 * 1000, cost1);
-                            printf("----------------\n");
+                            int cost = echoRes(res1, start, finish1, model, nv);
+
                             // another method:
-                            int res2 = dpll_decay(L, nv, model, decay);
-                            // int res = dpll_new(L, nv, model);
-                            if (res1 == 1) {
-                                printf("> INFO: Found solution.\n");
-                                // echo_model(model, nv);
-                            } else printf("> INFO: No solution found.\n");
+                            finish1 = clock();
+                            int res2 = dpll_valilla(L, nv, model, 0);
                             finish2 = clock();
-                            double cost2 = (double)(finish2 - start) / CLOCKS_PER_SEC;
-                            printf("> INFO: CLOCKS_PER_SEC=%ld, Time cost: %lf ms (%lf s)\n", CLOCKS_PER_SEC, cost2 * 1000, cost2);
-                            // printf("Goodbye!\n");
-                            save2file(model, nv, res2, cost2, file_no);
+                            cost = echoRes(res1, finish1, finish2, model, nv);
+                            
+                            save2file(model, nv, res2, cost, file_no);
                             // free(model);
-                            List *L_check = parser(file_no, &nv, &nc);
-                            check(L_check, model, nv);
+                            // List *L_check = parser(file_no, &nv, &nc);
+                            // check(L_check, model, nv);
+                            // delete_L(L_checsk);
                             delete_L(L);
-                            // delete_L(L_check);
                             exit(0);
                             break;
-                        // case 2:
-                        //     printf("> Input CNF:\n");
                         default:
                             quit = 1;
                             break;

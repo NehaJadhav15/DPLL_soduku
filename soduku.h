@@ -83,7 +83,7 @@ int solve(int board[][9], int info) {
             }
     // ehco_model_sat(model, nv);
     start = clock();
-    int res = dpll_decay(L, nv, model, decay);
+    int res = dpll_valilla(L, nv, model, 0);
     finish1 = clock();
     double cost1 = (double)(finish1 - start) / CLOCKS_PER_SEC;
     if (info)

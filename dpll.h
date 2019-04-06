@@ -5,7 +5,6 @@
 #define PATH "./data/n.cnf"
 #define RES_PATH "./data/n.res"
 #define UNKNOWN 0
-#define CHOOSE_V 0
 #define NEG -1
 #define UP 'w'
 #define DOWN 's'
@@ -314,7 +313,7 @@ int get_next_v(List * L, int nv) {
     return next_v;
 }
 
-int dpll_valilla(List * L, int nv, int model[]) {
+int dpll_valilla(List * L, int nv, int model[], int choose_v) {
     List * new_L = copy_L(L);
     // to find if there is single clause:
     while (1) {
@@ -352,13 +351,13 @@ int dpll_valilla(List * L, int nv, int model[]) {
         return 1;
     // choose v and assign:
     int next_v;
-    if (CHOOSE_V)
+    if (choose_v)
         next_v = get_next_v(new_L, nv);
     else
         next_v = new_L->head->data;
     model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
     add_v(&new_L, next_v);
-    if(dpll_valilla(new_L, nv, model) == 1) {
+    if(dpll_valilla(new_L, nv, model, choose_v) == 1) {
         delete_L(new_L);
         return 1;
     } else {
@@ -367,7 +366,7 @@ int dpll_valilla(List * L, int nv, int model[]) {
         free(bak->head);
         free(bak);
         add_v(&new_L, -next_v);
-        return dpll_valilla(new_L, nv, model);
+        return dpll_valilla(new_L, nv, model, choose_v);
     }
 }
 
@@ -408,16 +407,12 @@ int dpll_decay(List * L, int nv, int model[], float decay[]) {
     if (new_L == NULL)    // empty, succes.
         return 1;
     // choose v and assign:
-    int next_v;
-    if (CHOOSE_V) {
-        next_v = 0;
-        for (int i = 0; i < nv; i++)
-            if (decay[i] > decay[next_v])
-                next_v = i;
-        if (next_v + 1 > nv)
-            next_v = -(next_v - nv);
-    } else
-        next_v = new_L->head->data;
+    int next_v = 0 ;
+    for (int i = 0; i < nv; i++)
+        if (decay[i] > decay[next_v])
+            next_v = i;
+    if (next_v + 1 > nv)
+        next_v = -(next_v - nv);
     model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
     add_v(&new_L, next_v);
     if(dpll_decay(new_L, nv, model, decay) == 1) {
@@ -432,130 +427,6 @@ int dpll_decay(List * L, int nv, int model[], float decay[]) {
         add_v(&new_L, -next_v);
         return dpll_decay(new_L, nv, model, decay);
     }
-}
-
-int dpll_new(List * L, int nv, int model[]) {
-    // List **s = (List **)malloc(nv * sizeof(List *));
-    Cell *s = (Cell *)malloc(nv * sizeof(Cell));
-    for (int i = 0; i < nv; i++) {
-        s[i].L = NULL;
-        s[i].new_L = NULL;
-        s[i].prefer_v = 0;
-        s[i].received_value = 0;
-        s[i].tried_another = 0;
-    }
-    int depth = 0;       // stack depth, -1 for empty.
-    s[0].L = L;
-    while (depth != -1) {
-        int pop_now = 0;
-        // get and process returned value :
-        if (s[depth].received_value == 1) {
-            s[depth].L = NULL;
-            s[depth].new_L = NULL;
-            s[depth].prefer_v = 0;
-            s[depth].received_value = 0;
-            s[depth].tried_another = 0;
-            s[depth - 1].received_value = 1;
-            depth--;
-            continue;
-        } else if (s[depth].received_value == -1) {
-            if (s[depth].tried_another == 1) {
-                s[depth].L = NULL;
-                s[depth].new_L = NULL;
-                s[depth].prefer_v = 0;
-                s[depth].received_value = 0;
-                s[depth].tried_another = 0;
-                s[depth - 1].received_value = -1;
-                depth --;
-                continue;
-            } else {
-                List *bak = s[depth].new_L;
-                s[depth].new_L = (s[depth].new_L)->next;    // remove prefer_v from new_L.
-                free(bak->head);
-                free(bak);
-                add_v(&(s[depth].new_L), -s[depth].prefer_v);
-                s[depth + 1].L = s[depth].new_L;
-                s[depth].tried_another = 1;
-                depth ++;
-                continue;
-            }
-        }
-        List * new_L = copy_L(s[depth].L);
-        s[depth].new_L = new_L;
-        // to find if there is single clause:
-        while (1) {
-            List *lp = new_L;
-            Node *np = NULL;
-            int have_single = 0;
-            while (lp) {
-                np = lp->head;
-                while(np) {
-                    if (lp->head && !lp->head->next) {
-                        int value = np->data > 0 ? 1 : NEG, tmp = np->data;
-                        model[abs(np->data) - 1] = value;
-                        have_single = 1;
-                        int res = remove_v(&new_L, np->data);
-                        echo(new_L);
-                        if (res != 0) {
-                            s[depth].L = NULL;
-                            s[depth].new_L = NULL;
-                            s[depth].prefer_v = 0;
-                            s[depth].received_value = 0;
-                            s[depth].tried_another = 0;
-                            s[depth - 1].received_value = res;
-                            depth--;
-                            continue;
-                        }
-                        printf("> INFO: Assign clause[%d].\n", tmp);
-                        // echo(L);
-                        break;
-                    } else if (lp->head == NULL) {
-                        delete_L(new_L);
-                        s[depth].L = NULL;
-                        s[depth].new_L = NULL;
-                        s[depth].prefer_v = 0;
-                        s[depth].received_value = 0;
-                        s[depth].tried_another = 0;
-                        s[depth - 1].received_value = -1;
-                        depth--;
-                        pop_now = 1;
-                        break;
-                    }
-                    np = np->next;
-                }
-                if (have_single || pop_now)
-                    break;
-                lp = lp->next;
-            }
-            if (!have_single || pop_now)
-                break;
-        }
-        // echo(new_L);
-        if (pop_now)
-            continue;
-        if (new_L == NULL) {  // empty, succes.
-            s[depth].L = NULL;
-            s[depth].new_L = NULL;
-            s[depth].prefer_v = 0;
-            s[depth].received_value = 0;
-            s[depth].tried_another = 0;
-            s[depth - 1].received_value = 1;
-            depth--;
-            continue;
-        }
-        // choose v and assign:
-        int next_v = get_next_v(new_L, nv);
-        s[depth].prefer_v = next_v;
-        model[abs(next_v) - 1] = next_v > 0 ? 1 : NEG;
-        add_v(&new_L, next_v);
-        depth ++;
-        s[depth].L = new_L;
-        // echo(s[depth].L);
-    }
-    if (s[0].received_value == 1)
-        return 1;
-    else
-        return -1;
 }
 
 int save2file(int model[], int nv, int res, double cost, int file_no) {
@@ -576,7 +447,6 @@ int save2file(int model[], int nv, int res, double cost, int file_no) {
     }
     fprintf(fp, "%lf", cost * 1000);
 }
-
 
 int check(List * L, int model[], int nv) {
     for (int i = 0; i < nv; i++) {
